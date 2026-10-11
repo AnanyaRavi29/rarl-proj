@@ -12,3 +12,37 @@ outputs/
 *.pth
 *.npz
 *.gz
+# ============================================================
+# Local reproduction artifacts
+# ============================================================
+
+# D4RL datasets
+data/*.pkl
+data/*.hdf5
+data/*.h5
+
+# Training outputs
+logs/
+wandb/
+results/
+outputs/
+checkpoints/
+
+# Model checkpoints
+*.pt
+*.pth
+*.ckpt
+
+# nohup
+nohup.out
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
+data/*.npy
