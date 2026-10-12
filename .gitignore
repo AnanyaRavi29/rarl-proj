@@ -46,3 +46,12 @@ __pycache__/
 .vscode/
 .idea/
 data/*.npy
+
+# JAX generated artifacts
+jax_impl/checkpoints/
+jax_impl/outputs/
+jax_impl/logs/
+jax_impl/wandb/
+
+# Preprocessed transition datasets
+data/*.npz
