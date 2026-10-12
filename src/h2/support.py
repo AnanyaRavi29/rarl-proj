@@ -29,6 +29,29 @@ def knn_distance(wd, es, ss, k=20, batch=4096, k_search=64):
     return np.median(kdist[inv].reshape(ids.shape), axis=1)
 
 
+@torch.no_grad()
+def knn_distance_gpu(wd, es, ss, k=20, batch=1024, device="cuda"):
+    """Same as knn_distance, as exact brute force on the GPU (seconds instead of minutes)."""
+    sa = np.concatenate([np.concatenate([ep["obs"], ep["act"]], 1) for ep in wd.eps])
+    z = torch.from_numpy(((sa - sa.mean(0)) / (sa.std(0) + 1e-6)).astype(np.float32)).to(device)
+    zn = (z * z).sum(1)
+    ep_of = torch.from_numpy(np.repeat(np.arange(len(wd.eps)), wd.lengths)).to(device)
+
+    ids = (wd.offsets[es] + ss)[:, None] + np.arange(wd.H)[None]
+    uniq, inv = np.unique(ids.ravel(), return_inverse=True)
+    uq = torch.from_numpy(uniq).to(device)
+    kdist = np.empty(len(uniq), np.float32)
+    for b in tqdm(range(0, len(uniq), batch), desc="S1 kNN (GPU)", unit="batch"):
+        q = uq[b:b + batch]
+        d2 = zn[q][:, None] + zn[None, :] - 2.0 * (z[q] @ z.T)
+        d2.masked_fill_(ep_of[q][:, None] == ep_of[None, :], float("inf"))  # exclude the window's own episode
+        kth = d2.topk(k, dim=1, largest=False).values[:, -1]
+        kdist[b:b + len(q)] = kth.clamp_min(0).sqrt().cpu().numpy()
+    del z, zn, ep_of, uq
+    torch.cuda.empty_cache()
+    return np.median(kdist[inv].reshape(ids.shape), axis=1)
+
+
 def _kth_external(index, z, ep_of, q, k, k_search, k_max):
     d, i = index.search(z[q], k_search)
     d = np.where(ep_of[i] == ep_of[q][:, None], np.inf, d)

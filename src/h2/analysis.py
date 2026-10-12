@@ -80,16 +80,26 @@ def load_sweep(out):
     return sel, df
 
 
+OUTCOMES = ["mu_star", "mu90", "mu_safe"]
+
+
 def best_mu(agg, thr):
-    """mu*: highest gain among edits with dynamic MSE <= thr.  mu90: smallest mu reaching 90% of max gain."""
+    """Per window:
+    mu_star  highest gain among edits with dynamic MSE <= thr
+    mu90     smallest mu reaching 90% of the window's max gain
+    mu_safe  largest mu reached before dynamic MSE first exceeds thr (0 if already exceeded at the smallest mu)
+    """
     rows = []
-    for w, g in agg.groupby("window"):
+    for w, g in agg.sort_values("mu").groupby("window"):
         ok = g[g.dyn_mse <= thr]
         mu_star = float(ok.mu.values[np.argmax(ok.gain_rel.values)]) if len(ok) else np.nan
         gmax = g.gain_rel.max()
         mu90 = float(g.mu[g.gain_rel >= 0.9 * gmax].min()) if gmax > 0 else np.nan
-        rows.append((w, mu_star, mu90))
-    return pd.DataFrame(rows, columns=["window", "mu_star", "mu90"])
+        safe = g.dyn_mse.values <= thr
+        n_safe = int(np.argmin(safe)) if (~safe).any() else len(safe)
+        mu_safe = float(g.mu.values[n_safe - 1]) if n_safe > 0 else 0.0
+        rows.append((w, mu_star, mu90, mu_safe))
+    return pd.DataFrame(rows, columns=["window"] + OUTCOMES)
 
 
 def _ols(q, s, y):
@@ -133,11 +143,13 @@ def _heat(ax, table, title, fmt=".2f", cmap="viridis"):
     ax.set_title(title)
 
 
-def analyze(out, support="S2", thr=0.017, n_boot=2000, seed=0):
+def analyze(out, support="S2", thr=0.017, n_boot=2000, seed=0, max_mu=None):
     out = Path(out)
     fig_dir = out / "figures"
     fig_dir.mkdir(exist_ok=True)
     sel, df = load_sweep(out)
+    if max_mu is not None:  # e.g. 0.5: only edits that keep part of the source window
+        df = df[df.mu <= max_mu + 1e-9]
     sel = sel.assign(S=sel[support])
     df = df.assign(S=df[support])
     df.to_csv(out / "sweep.csv", index=False)
@@ -185,9 +197,9 @@ def analyze(out, support="S2", thr=0.017, n_boot=2000, seed=0):
     plt.close(fig)
 
     # 3) best mu vs Q and S
-    fig, ax = plt.subplots(2, 2, figsize=(11, 8))
+    fig, ax = plt.subplots(len(OUTCOMES), 2, figsize=(11, 4 * len(OUTCOMES)))
     rng = np.random.default_rng(seed)
-    for r, ycol in enumerate(["mu_star", "mu90"]):
+    for r, ycol in enumerate(OUTCOMES):
         for c, xcol in enumerate(["Q", "S"]):
             b = best.dropna(subset=[ycol])
             jitter = rng.uniform(-0.01, 0.01, len(b))
@@ -204,8 +216,8 @@ def analyze(out, support="S2", thr=0.017, n_boot=2000, seed=0):
     plt.close(fig)
 
     # 4) the hypothesis map: mean mu* per (Q bin, S bin)
-    fig, ax = plt.subplots(1, 2, figsize=(13, 5))
-    for a, ycol in zip(ax, ["mu_star", "mu90"]):
+    fig, ax = plt.subplots(1, len(OUTCOMES), figsize=(6.5 * len(OUTCOMES), 5))
+    for a, ycol in zip(ax, OUTCOMES):
         t = best.pivot_table(index="q_bin", columns="s_bin", values=ycol, aggfunc="mean")
         t.index = [bin_labels[int(i)] for i in t.index]
         t.columns = [int(i) for i in t.columns]
@@ -235,10 +247,13 @@ def analyze(out, support="S2", thr=0.017, n_boot=2000, seed=0):
     fig.savefig(fig_dir / "ceiling_check.png", dpi=120)
     plt.close(fig)
 
+    # 6) support vs physics error, one panel per mu + correlation profile
+    _plot_support_vs_physics(agg, sel, support, mus, thr, nb, fig_dir)
+
     # statistics + verdict (decision rule fixed before the run)
-    stats = {"support_metric": support, "dyn_mse_threshold": thr, "n_windows": int(sel.shape[0]),
+    stats = {"support_metric": support, "dyn_mse_threshold": thr, "max_mu": max_mu, "n_windows": int(sel.shape[0]),
              "mus": mus, "draws": int(df.draw.nunique())}
-    for ycol in ["mu_star", "mu90"]:
+    for ycol in OUTCOMES:
         b = best.dropna(subset=[ycol])
         stats[ycol] = {
             "spearman_Q": float(spearmanr(b.Q, b[ycol])[0]),
@@ -259,12 +274,115 @@ def analyze(out, support="S2", thr=0.017, n_boot=2000, seed=0):
             return "PARTLY SUPPORTED (" + ("S effect" if s_ok else "Q effect") + " only" + ("" if big else ", small") + ")"
         return "NOT SUPPORTED"
 
-    stats["verdict_mu_star"] = verdict(stats["mu_star"])
-    stats["verdict_mu90"] = verdict(stats["mu90"])
+    for ycol in OUTCOMES:
+        stats["verdict_" + ycol] = verdict(stats[ycol])
+    stats["correlation_profile"] = _correlation_profile(agg, sel, support).round(3).to_dict(orient="list")
+
+    # 7) one-slide summary of all correlations
+    _plot_correlation_summary(stats, best, agg, sel, support, nb, bin_labels, fig_dir)
+
     (out / "summary.json").write_text(json.dumps(stats, indent=2))
     _write_summary(out, stats)
-    print(json.dumps({k: stats[k] for k in ["verdict_mu_star", "verdict_mu90"]}, indent=2))
+    print(json.dumps({k: stats["verdict_" + k] for k in OUTCOMES}, indent=2))
     print(f"Figures in {fig_dir}, summary in {out / 'summary.md'}")
+
+
+def _correlation_profile(agg, sel, support):
+    """Spearman correlations at every mu: support/quality vs physics error and vs reward gain."""
+    other = "S1" if support != "S1" else "S2"
+    a = agg.merge(sel[["window", other]], on="window") if other in sel else agg.assign(**{other: np.nan})
+    rows = []
+    for mu, g in a.groupby("mu"):
+        rows.append(dict(mu=mu,
+                         S_vs_dyn=spearmanr(g.S, g.dyn_mse)[0], Q_vs_dyn=spearmanr(g.Q, g.dyn_mse)[0],
+                         S_vs_gain=spearmanr(g.S, g.gain_rel)[0], Q_vs_gain=spearmanr(g.Q, g.gain_rel)[0],
+                         other_S_vs_dyn=spearmanr(g[other], g.dyn_mse)[0] if g[other].notna().all() else np.nan))
+    return pd.DataFrame(rows)
+
+
+def _plot_support_vs_physics(agg, sel, support, mus, thr, nb, fig_dir):
+    cols = 4
+    rows_ = -(-(len(mus) + 1) // cols)
+    fig, ax = plt.subplots(rows_, cols, figsize=(4.2 * cols, 3.6 * rows_), squeeze=False)
+    for a, mu in zip(ax.ravel(), mus):
+        g = agg[agg.mu == mu]
+        a.scatter(g.S, g.dyn_mse, s=6, alpha=0.35, c=g.Q, cmap="viridis")
+        binned = g.groupby(np.minimum((g.S * nb).astype(int), nb - 1)).dyn_mse
+        a.errorbar((binned.mean().index + 0.5) / nb, binned.mean().values, yerr=binned.sem().values,
+                   fmt="r-o", lw=2, label="bin mean ± s.e.")
+        a.axhline(thr, color="k", ls="--", lw=1)
+        a.set_yscale("log")
+        a.set_title(f"mu={mu:g}: Spearman(S, dyn MSE) = {spearmanr(g.S, g.dyn_mse)[0]:+.2f}")
+        a.set_xlabel(f"support {support} percentile")
+        a.set_ylabel("dynamic MSE (log)")
+    ax.ravel()[0].legend(fontsize=7)
+    prof = _correlation_profile(agg, sel, support)
+    a = ax.ravel()[len(mus)]
+    a.plot(prof.mu, prof.S_vs_dyn, "r-o", label=f"support {support}")
+    if prof.other_S_vs_dyn.notna().all():
+        a.plot(prof.mu, prof.other_S_vs_dyn, "r--s", alpha=0.6, label="other support metric")
+    a.plot(prof.mu, prof.Q_vs_dyn, "b-o", label="quality Q")
+    a.axhline(0, color="k", lw=0.8)
+    a.set_xlabel("mu")
+    a.set_ylabel("Spearman with dynamic MSE")
+    a.set_title("Who predicts physics error?")
+    a.legend(fontsize=7)
+    for a in ax.ravel()[len(mus) + 1:]:
+        a.axis("off")
+    fig.suptitle("Edits of poorly supported windows break physics more (colour = quality)", y=1.0)
+    fig.tight_layout()
+    fig.savefig(fig_dir / "support_vs_physics.png", dpi=120)
+    plt.close(fig)
+
+
+def _plot_correlation_summary(stats, best, agg, sel, support, nb, bin_labels, fig_dir):
+    fig, ax = plt.subplots(1, 3, figsize=(18, 4.8))
+
+    # (a) effect sizes with 95% CIs for every outcome
+    y = 0
+    ticks = []
+    for ycol in OUTCOMES:
+        r = stats[ycol]["regression"]
+        for k, col in [("S", "tab:red"), ("Q", "tab:blue")]:
+            lo, hi = r["ci95"][k]
+            ax[0].errorbar(r["coef"][k], y, xerr=[[r["coef"][k] - lo], [hi - r["coef"][k]]], fmt="o", color=col,
+                           capsize=4, label=("support S" if k == "S" else "quality Q") if ycol == OUTCOMES[0] else None)
+            ticks.append((y, f"{ycol}  ({k})"))
+            y += 1
+        y += 0.5
+    ax[0].axvline(0, color="k", lw=0.8)
+    ax[0].set_yticks([t[0] for t in ticks])
+    ax[0].set_yticklabels([t[1] for t in ticks])
+    ax[0].invert_yaxis()
+    ax[0].set_xlabel("effect on mu, lowest -> highest percentile (95% CI)")
+    ax[0].set_title("Effect of support and quality on the chosen mu")
+    ax[0].legend(fontsize=8)
+
+    # (b) mu_safe by support bin vs by quality bin
+    for b, lab, col in [("s_bin", f"support {support}", "tab:red"), ("q_bin", "quality Q", "tab:blue")]:
+        g = best.groupby(b).mu_safe
+        ax[1].errorbar(g.mean().index, g.mean().values, yerr=g.sem().values, fmt="-o", color=col, capsize=4, label=lab)
+    ax[1].set_xticks(range(nb))
+    ax[1].set_xticklabels(bin_labels)
+    ax[1].set_xlabel("percentile bin")
+    ax[1].set_ylabel("mean mu_safe (± s.e.)")
+    ax[1].set_title(f"How hard can a window be edited before physics breaks? (thr={stats['dyn_mse_threshold']})")
+    ax[1].legend(fontsize=8)
+
+    # (c) correlation profile across mu
+    prof = _correlation_profile(agg, sel, support)
+    ax[2].plot(prof.mu, prof.S_vs_dyn, "r-o", label="support vs physics error")
+    ax[2].plot(prof.mu, prof.Q_vs_dyn, "b-o", label="quality vs physics error")
+    ax[2].plot(prof.mu, prof.S_vs_gain, "r--s", alpha=0.6, label="support vs reward gain")
+    ax[2].plot(prof.mu, prof.Q_vs_gain, "b--s", alpha=0.6, label="quality vs reward gain")
+    ax[2].axhline(0, color="k", lw=0.8)
+    ax[2].set_xlabel("mu")
+    ax[2].set_ylabel("Spearman correlation")
+    ax[2].set_title("Support predicts physics error; quality predicts reward gain")
+    ax[2].legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(fig_dir / "correlation_summary.png", dpi=120)
+    plt.close(fig)
 
 
 def _write_summary(out, st):
@@ -272,8 +390,11 @@ def _write_summary(out, st):
              f"Support metric: **{st['support_metric']}**, windows: {st['n_windows']}, mus: {st['mus']}, "
              f"draws: {st['draws']}, dynamic-MSE threshold: {st['dyn_mse_threshold']}", "",
              "Hypothesis: mu* rises with S and falls with Q. Decision rule: S coefficient CI > 0, "
-             "Q coefficient CI < 0, and mu*(low Q/high S) - mu*(high Q/low S) >= 0.1.", ""]
-    for ycol in ["mu_star", "mu90"]:
+             "Q coefficient CI < 0, and mu*(low Q/high S) - mu*(high Q/low S) >= 0.1.", "",
+             "Outcomes per window: `mu_star` = highest reward gain with dynamic MSE <= threshold; "
+             "`mu90` = smallest mu reaching 90% of the max gain; `mu_safe` = largest mu before dynamic MSE "
+             "first exceeds the threshold (added after the first main-run analysis, so exploratory there).", ""]
+    for ycol in OUTCOMES:
         s, r = st[ycol], st[ycol]["regression"]
         lines += [f"## {ycol}: {st['verdict_' + ycol]}", "",
                   f"- Spearman with Q: {s['spearman_Q']:.3f}, with S: {s['spearman_S']:.3f}",
@@ -284,9 +405,17 @@ def _write_summary(out, st):
         lines.append(f"- Quadrant means: {s['quadrant_mean']}")
         lines.append(f"- Extreme-quadrant difference: {s['extreme_quadrant_diff']:+.3f}")
         lines.append("")
+    p = pd.DataFrame(st["correlation_profile"])
+    lines += ["## Correlation profile (Spearman, per mu)", "",
+              "| mu | support vs physics error | quality vs physics error | support vs gain | quality vs gain |",
+              "|---|---|---|---|---|"]
+    lines += [f"| {r.mu:g} | {r.S_vs_dyn:+.3f} | {r.Q_vs_dyn:+.3f} | {r.S_vs_gain:+.3f} | {r.Q_vs_gain:+.3f} |"
+              for r in p.itertuples()]
+    lines.append("")
     lines += ["## Settings to keep in mind",
               "- Guidance uses the config's `temperature: 1.0` (w = 0), not the paper's w = 2.",
               "- The upstream network drops the return condition at random (p = 0.25) even while sampling; kept as-is.",
               "", "Figures: `figures/heatmaps.png`, `figures/quadrant_curves.png`, `figures/best_mu_vs_Q_S.png`, "
-              "`figures/best_mu_map.png`, `figures/ceiling_check.png`, `pool_overview.png`."]
+              "`figures/best_mu_map.png`, `figures/ceiling_check.png`, `figures/support_vs_physics.png`, "
+              "`figures/correlation_summary.png`, `pool_overview.png`."]
     (out / "summary.md").write_text("\n".join(lines))
