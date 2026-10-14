@@ -1,0 +1,136 @@
+{
+  "final_scores": [
+    {
+      "condition": "none",
+      "mean": 48.72,
+      "std": 0.06,
+      "count": 3
+    },
+    {
+      "condition": "uniform_0.3",
+      "mean": 51.51,
+      "std": 0.36,
+      "count": 3
+    },
+    {
+      "condition": "adaptive",
+      "mean": 54.91,
+      "std": 0.41,
+      "count": 3
+    },
+    {
+      "condition": "inverted",
+      "mean": 51.81,
+      "std": 0.6,
+      "count": 3
+    },
+    {
+      "condition": "uniform_0.5",
+      "mean": 59.31,
+      "std": 0.3,
+      "count": 3
+    },
+    {
+      "condition": "adaptive_wide",
+      "mean": 58.6,
+      "std": 0.65,
+      "count": 3
+    },
+    {
+      "condition": "inverted_wide",
+      "mean": 58.81,
+      "std": 0.7,
+      "count": 3
+    }
+  ],
+  "tests": {
+    "adaptive_vs_uniform_0.3": {
+      "diff": 3.4002800589975735,
+      "welch_p": 0.0004396550946004674
+    },
+    "adaptive_vs_inverted": {
+      "diff": 3.103553589571092,
+      "welch_p": 0.002934333227254599
+    },
+    "adaptive_vs_uniform_0.5": {
+      "diff": -4.3959367649967405,
+      "welch_p": 0.00019037414161469717
+    },
+    "adaptive_vs_none": {
+      "diff": 6.187066593167835,
+      "welch_p": 0.0011785653285316274
+    },
+    "adaptive_wide_vs_uniform_0.5": {
+      "diff": -0.7056983464990978,
+      "welch_p": 0.1945401121739064
+    },
+    "adaptive_wide_vs_inverted_wide": {
+      "diff": -0.211972221802597,
+      "welch_p": 0.7216102520232645
+    }
+  },
+  "data_quality": [
+    {
+      "condition": "uniform_0.3",
+      "mean_mu": 0.3,
+      "oracle_reward": 158.3648,
+      "source_reward": 149.6092,
+      "rel_gain": 0.0571,
+      "dyn_mse": 0.0096,
+      "frac_dyn_over_0085": 0.3552,
+      "shift": 0.2377
+    },
+    {
+      "condition": "adaptive",
+      "mean_mu": 0.3,
+      "oracle_reward": 162.1133,
+      "source_reward": 149.6092,
+      "rel_gain": 0.079,
+      "dyn_mse": 0.009,
+      "frac_dyn_over_0085": 0.343,
+      "shift": 0.2562
+    },
+    {
+      "condition": "inverted",
+      "mean_mu": 0.3,
+      "oracle_reward": 160.8142,
+      "source_reward": 149.6092,
+      "rel_gain": 0.0829,
+      "dyn_mse": 0.0091,
+      "frac_dyn_over_0085": 0.3292,
+      "shift": 0.2742
+    },
+    {
+      "condition": "uniform_0.5",
+      "mean_mu": 0.5,
+      "oracle_reward": 194.7981,
+      "source_reward": 149.6092,
+      "rel_gain": 0.3266,
+      "dyn_mse": 0.0076,
+      "frac_dyn_over_0085": 0.2536,
+      "shift": 0.8826
+    },
+    {
+      "condition": "adaptive_wide",
+      "mean_mu": 0.5,
+      "oracle_reward": 183.1311,
+      "source_reward": 149.6092,
+      "rel_gain": 0.2199,
+      "dyn_mse": 0.0092,
+      "frac_dyn_over_0085": 0.3292,
+      "shift": 0.8077
+    },
+    {
+      "condition": "inverted_wide",
+      "mean_mu": 0.5,
+      "oracle_reward": 188.02,
+      "source_reward": 149.6092,
+      "rel_gain": 0.3187,
+      "dyn_mse": 0.0075,
+      "frac_dyn_over_0085": 0.2436,
+      "shift": 0.8485
+    }
+  ],
+  "verdict": "SUPPORTED: support-adaptive mu beats both same-average uniform mu and the inverted mapping",
+  "verdict_wide (mean mu 0.5)": "NOT SUPPORTED: adaptive_wide does not significantly beat both uniform_0.5 and inverted_wide"
+}
