@@ -19,6 +19,12 @@ CONDITIONS = {
     "uniform_0.3": [0.3] * 5,
     "adaptive": [0.2, 0.25, 0.3, 0.35, 0.4],
     "inverted": [0.4, 0.35, 0.3, 0.25, 0.2],
+    # same design centred on the paper's mu = 0.5 (no 0.4 cap)
+    "adaptive_wide": [0.3, 0.4, 0.5, 0.6, 0.7],
+    "inverted_wide": [0.7, 0.6, 0.5, 0.4, 0.3],
+    # indexed by QUALITY quintile (ranked within support quintiles) in the quality experiments
+    "quality_adaptive": [0.7, 0.6, 0.5, 0.4, 0.3],
+    "quality_inverted": [0.3, 0.4, 0.5, 0.6, 0.7],
 }
 
 

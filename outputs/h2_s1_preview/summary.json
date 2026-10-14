@@ -1,0 +1,102 @@
+{
+  "support_metric": "S1",
+  "dyn_mse_threshold": 0.017,
+  "n_windows": 184,
+  "mus": [
+    0.1,
+    0.2,
+    0.3,
+    0.35,
+    0.4,
+    0.45,
+    0.5,
+    0.75
+  ],
+  "draws": 2,
+  "mu_star": {
+    "spearman_Q": -0.34114436485491734,
+    "spearman_S": -0.052606333657810256,
+    "regression": {
+      "n": 184,
+      "coef": {
+        "intercept": 0.6277,
+        "Q": -0.1742,
+        "S": 0.0165,
+        "QxS": 0.0323
+      },
+      "ci95": {
+        "intercept": [
+          0.6082,
+          0.647
+        ],
+        "Q": [
+          -0.2428,
+          -0.1008
+        ],
+        "S": [
+          -0.0543,
+          0.0917
+        ],
+        "QxS": [
+          -0.2015,
+          0.2744
+        ]
+      },
+      "perm_p": {
+        "Q": 0.0,
+        "S": 0.651
+      }
+    },
+    "quadrant_mean": {
+      "high Q / high S": 0.586,
+      "high Q / low S": 0.586,
+      "low Q / high S": 0.669,
+      "low Q / low S": 0.668
+    },
+    "extreme_quadrant_diff": 0.08300000000000007
+  },
+  "mu90": {
+    "spearman_Q": -0.37721680672928176,
+    "spearman_S": -0.1738059492172515,
+    "regression": {
+      "n": 183,
+      "coef": {
+        "intercept": 0.542,
+        "Q": -0.1284,
+        "S": -0.0276,
+        "QxS": 0.0888
+      },
+      "ci95": {
+        "intercept": [
+          0.5246,
+          0.5599
+        ],
+        "Q": [
+          -0.1872,
+          -0.0719
+        ],
+        "S": [
+          -0.0866,
+          0.0328
+        ],
+        "QxS": [
+          -0.1208,
+          0.2952
+        ]
+      },
+      "perm_p": {
+        "Q": 0.0,
+        "S": 0.39
+      }
+    },
+    "quadrant_mean": {
+      "high Q / high S": 0.521,
+      "high Q / low S": 0.502,
+      "low Q / high S": 0.565,
+      "low Q / low S": 0.58
+    },
+    "extreme_quadrant_diff": 0.06299999999999994
+  },
+  "verdict_mu_star": "PARTLY SUPPORTED (Q effect only, small)",
+  "verdict_mu90": "PARTLY SUPPORTED (Q effect only, small)"
+}

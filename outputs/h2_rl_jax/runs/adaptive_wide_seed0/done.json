@@ -1,0 +1,6 @@
+{
+  "condition": "adaptive_wide",
+  "seed": 0,
+  "final_score_last5": 58.19216224035787,
+  "implementation": "jax"
+}

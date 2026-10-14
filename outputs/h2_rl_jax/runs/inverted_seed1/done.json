@@ -1,0 +1,6 @@
+{
+  "condition": "inverted",
+  "seed": 1,
+  "final_score_last5": 52.04786036689086,
+  "implementation": "jax"
+}

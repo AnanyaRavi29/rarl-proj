@@ -1,0 +1,6 @@
+{
+  "condition": "adaptive",
+  "seed": 2,
+  "final_score_last5": 55.36174853922728,
+  "implementation": "jax"
+}
