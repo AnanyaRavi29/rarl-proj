@@ -205,6 +205,51 @@ supported if the S coefficient's 95% CI is > 0, the Q coefficient's CI is < 0, a
 Code layout: `src/h2/common.py` (windows, model loading, MuJoCo checks), `quality.py`, `support.py`,
 `edit_eval.py` (µ sweep), `analysis.py` (figures, stats), `render.py`; CLI in `scripts/h2_run.py`.
 
+## 7. Experiment A: does per-window µ help TD3+BC?
+
+Each source window gets its own µ from its support (S2) or quality quintile; all conditions edit the
+**same** 161,291 source windows (5M generated transitions) with α = 1.3, then TD3+BC trains on
+original + generated data (batch 1024, 1M steps, final score = mean of the last 5 evaluations).
+
+```bash
+bash scripts/h2_rl_all.sh          # PyTorch TD3+BC (CORL), 5 conditions x 3 seeds   -> outputs/h2_rl/
+bash scripts/h2_rl_jax_all.sh      # JAX TD3+BC (~13x faster), 7 conditions x 3 seeds -> outputs/h2_rl_jax/
+bash scripts/h2_quality_pilot.sh   # quick pilot: µ by quality (300k transitions, 300k steps, 2 seeds)
+```
+
+JAX environment (training only; generation/evaluation stay in `gta`):
+```bash
+conda create -n gta-jax python=3.11 -y
+~/miniconda3/envs/gta-jax/bin/pip install -U "jax[cuda12]" flax optax numpy tqdm
+```
+
+**Results (JAX TD3+BC, D4RL normalised score, mean ± std over 3 seeds)** — `outputs/h2_rl_jax/rl_summary.md`,
+bar graph `outputs/h2_rl_jax/figures/rl_results.png`:
+
+| condition | µ by support quintile (low → high) | score |
+|---|---|---|
+| none | original data only | 48.72 ± 0.06 |
+| uniform_0.3 | 0.3 | 51.51 ± 0.36 |
+| inverted | 0.4 → 0.2 | 51.81 ± 0.60 |
+| adaptive | 0.2 → 0.4 | 54.91 ± 0.41 |
+| **uniform_0.5** (paper) | 0.5 | **59.31 ± 0.30** |
+| adaptive_wide | 0.3 → 0.7 | 58.60 ± 0.65 |
+| inverted_wide | 0.7 → 0.3 | 58.81 ± 0.70 |
+
+PyTorch TD3+BC (`outputs/h2_rl/`) gives the same picture (none 48.65, uniform_0.5 58.67, adaptive 53.53).
+
+**Quality pilot** (`outputs/h2_quality_pilot/`, µ by quality quintile ranked within support quintiles, mean µ 0.5):
+uniform 56.10 ± 0.16, quality_inverted 55.59 ± 0.30, quality_adaptive (edit good windows less) 54.86 ± 0.23.
+
+**Conclusions so far**
+- Reproduction matches the paper: no augmentation ≈ 48.7, GTA µ = 0.5 ≈ 58.7–59.3 (paper 48.4 / 57.8).
+- With a weak editing budget (mean µ 0.3), giving more editing to well-supported windows helps (+3 points, p < 0.01, PyTorch and JAX).
+- At GTA's strength (mean µ 0.5), assigning µ by support or by quality does **not** beat a single µ = 0.5.
+- Support still predicts which edits break physics (H2 study, section 6); it just does not translate into RL gains at µ = 0.5.
+- Caveats: one dataset, 3 training seeds, one generated dataset per condition, support and quality correlated (ρ ≈ 0.42), guidance w = 0.
+
+Slides on the metrics (quality, S1, S2, S3, validation): `docs/h2_metrics/h2_metrics.pdf`; full deck: `docs/h2_presentation/`.
+
 ## Known issues
 
 - **TD3+BC with GTA data (`corl/algorithms/td3_bc.py --GDA GTA`) crashes as is**:

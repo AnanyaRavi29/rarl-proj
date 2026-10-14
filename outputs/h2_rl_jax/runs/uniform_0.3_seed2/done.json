@@ -1,0 +1,6 @@
+{
+  "condition": "uniform_0.3",
+  "seed": 2,
+  "final_score_last5": 51.91930616461315,
+  "implementation": "jax"
+}

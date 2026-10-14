@@ -34,7 +34,7 @@ def setup(args, need_model=True):
 def cmd_pool(args):
     from src.h2.analysis import plot_pool, pool_report
     from src.h2.quality import build_catalog
-    from src.h2.support import knn_distance, log_likelihood, recon_error, recon_score
+    from src.h2.support import knn_distance, knn_distance_gpu, log_likelihood, recon_error, recon_score
 
     cfg, wd, model, _, device = setup(args)
     out = Path(args.out)
@@ -45,7 +45,10 @@ def cmd_pool(args):
     print(f"Catalog: {len(catalog)} windows -> pool of {len(pool)}")
     es, ss = pool.episode.values, pool.start.values
 
-    pool["s1_dist"] = knn_distance(wd, es, ss, k=args.k)
+    if device == "cuda":
+        pool["s1_dist"] = knn_distance_gpu(wd, es, ss, k=args.k)
+    else:
+        pool["s1_dist"] = knn_distance(wd, es, ss, k=args.k)
     errs = recon_error(model, wd, es, ss, args.sigmas, args.recon_draws, args.batch, device, args.seed)
     for j, sig in enumerate(args.sigmas):
         pool[f"s2_err_sigma{sig:g}"] = errs[:, j]
@@ -98,7 +101,7 @@ def cmd_sweep(args):
 
 def cmd_analyze(args):
     from src.h2.analysis import analyze
-    analyze(Path(args.out), args.support, args.thr, args.n_boot, args.seed)
+    analyze(Path(args.out), args.support, args.thr, args.n_boot, args.seed, args.max_mu)
 
 
 def cmd_render(args):
@@ -133,6 +136,7 @@ def main():
     # analyze
     p.add_argument("--thr", type=float, default=0.017, help="dynamic-MSE limit for mu*")
     p.add_argument("--n_boot", type=int, default=2000)
+    p.add_argument("--max_mu", type=float, default=None, help="only use mu <= this in analyze")
     # render
     p.add_argument("--window", type=int, default=0)
     p.add_argument("--draw", type=int, default=0)
