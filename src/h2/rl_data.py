@@ -61,15 +61,18 @@ def windows_to_transitions(windows, obs_dim, act_dim):
     )
 
 
-def generate_condition(name, src, wd, model, env, cfg, batch, device, seed, out, n_check=5000):
+def generate_condition(name, src, wd, model, env, cfg, batch, device, seed, out, n_check=5000, mus=None, alphas=None):
     """Edit every source window with its condition-specific mu; save transitions + a data-quality check."""
     path = Path(out) / f"{name}.npz"
     if path.exists():
         print(f"{name}: already generated ({path})")
         return
-    mus = np.asarray(CONDITIONS[name], np.float32)[src["s_bin"]]
+    if mus is None:
+        mus = np.asarray(CONDITIONS[name], np.float32)[src["s_bin"]]
+    mus = np.round(np.asarray(mus, np.float32), 4)
     g = cfg.SimpleDiffusionGenerator
-    cond = amplified_condition(src["rtg"], g.amplify_returnscale, cfg.Dataset.reward_scale)
+    alpha = g.amplify_returnscale if alphas is None else np.asarray(alphas, np.float32)
+    cond = amplified_condition(src["rtg"], alpha, cfg.Dataset.reward_scale)
     n = len(mus)
     edited = np.empty((n, wd.H + 1, wd.obs_dim + wd.act_dim + 1), np.float32)
 
@@ -96,7 +99,7 @@ def generate_condition(name, src, wd, model, env, cfg, batch, device, seed, out,
     m = edit_metrics(env, edited[chk], sources, wd.obs_dim, wd.act_dim, wd.state_std(), desc=f"check {name}")
     m_src = edit_metrics(env, sources, sources, wd.obs_dim, wd.act_dim, wd.state_std(), desc="check sources")
 
-    np.savez(path, mu=mus, check_idx=chk, check_src_oracle_r=m_src["oracle_r"],
+    np.savez(path, mu=mus, alpha=np.broadcast_to(np.asarray(alpha, np.float32), mus.shape), check_idx=chk, check_src_oracle_r=m_src["oracle_r"],
              **{f"check_{k}": v for k, v in m.items()},
              **windows_to_transitions(edited, wd.obs_dim, wd.act_dim))
     print(f"{name}: saved {path} ({n * wd.H} transitions); check: oracle reward {m['oracle_r'].mean():.1f} "
