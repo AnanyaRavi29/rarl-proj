@@ -4,7 +4,6 @@ __pycache__/
 *.pt
 *.pkl
 wandb/
-outputs/
 *.ckpt
 *.npy
 *.yaml
@@ -25,7 +24,6 @@ data/*.h5
 logs/
 wandb/
 results/
-outputs/
 checkpoints/
 
 # Model checkpoints
@@ -49,7 +47,6 @@ data/*.npy
 
 # JAX generated artifacts
 jax_impl/checkpoints/
-jax_impl/outputs/
 jax_impl/logs/
 jax_impl/wandb/
 
